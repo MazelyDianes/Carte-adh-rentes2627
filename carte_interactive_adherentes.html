@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Carte des adhérentes</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+html,body,#map{height:100%;margin:0}
+#status{position:absolute;z-index:1000;top:12px;left:12px;background:white;padding:10px 14px;border-radius:8px;box-shadow:0 1px 6px #999;font-family:Arial,sans-serif;font-size:14px}
+.leaflet-popup-content{font-family:Arial,sans-serif;line-height:1.45}
+</style>
+</head>
+<body>
+<div id="status">Chargement de la carte…</div>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const people = [{"nom": "Barraud", "prenom": "Elodie", "adresse": "17770 Juicq"}, {"nom": "Barraud", "prenom": "Lyse", "adresse": "87520 Javerdat"}, {"nom": "Baudry", "prenom": "Cécile", "adresse": "17290 Ballon"}, {"nom": "Berchotteau", "prenom": "Annie", "adresse": "17740 Sainte Marie de Ré"}, {"nom": "Blanchard", "prenom": "Angélique", "adresse": "16120 Chateauneuf/Charente"}, {"nom": "Bouyer", "prenom": "Charlyse", "adresse": "17240 Plassac"}, {"nom": "Bouyer", "prenom": "Mazély", "adresse": "17240 Plassac"}, {"nom": "Choumil", "prenom": "Manon", "adresse": "17240 Champagnolles"}, {"nom": "De Roffignac", "prenom": "Françoise", "adresse": "17120 Grézac"}, {"nom": "Erable", "prenom": "Isabelle", "adresse": "17810 Pessines"}, {"nom": "Etien", "prenom": "Anais", "adresse": "17330 Lozay"}, {"nom": "Gouineau", "prenom": "Coralie", "adresse": "17240 Saint Dizant Du Gua"}, {"nom": "Gouineau", "prenom": "Solène", "adresse": "17380 Puy du Lac"}, {"nom": "Joubert", "prenom": "Léa", "adresse": "17800 Biron"}, {"nom": "Lys", "prenom": "Marine", "adresse": "17400 Courcelles"}, {"nom": "Michenaud", "prenom": "Jacqueline", "adresse": "17120 Mortagne-sur-Gironde"}, {"nom": "Montrichard", "prenom": "Marine", "adresse": "16410 Dignac"}, {"nom": "Morisset", "prenom": "Karène", "adresse": "17330 Saint Félix"}, {"nom": "Pechereau", "prenom": "Léa", "adresse": "17250 Trizay"}, {"nom": "Robin", "prenom": "Nathalie", "adresse": "17240 Saint Ciers du Taillon"}, {"nom": "Seurin", "prenom": "Élise", "adresse": "17210 Montlieu-la-Garde"}, {"nom": "Teurlais", "prenom": "Angélina", "adresse": "17210 Montlieu-la-Garde"}, {"nom": "Tournat", "prenom": "Séverine", "adresse": "17350 Saint Savinien"}, {"nom": "Thibault", "prenom": "Léa", "adresse": "17270 Montguyon"}, {"nom": "Gergouil", "prenom": "Noelie", "adresse": "17240 Bois"}, {"nom": "Lucas", "prenom": "Karine", "adresse": "79360 Beauvoir-sur-Niort"}, {"nom": "Puaud", "prenom": "Leïlou", "adresse": "17240 Saint Fort sur Gironde"}, {"nom": "Garlopeau", "prenom": "Eva", "adresse": "17430 Tonnay-Charente"}, {"nom": "Bégu", "prenom": "Ghislaine", "adresse": "17320 Saint Just Luzac"}, {"nom": "Boulineau", "prenom": "Cecile", "adresse": "17290 Ballon"}, {"nom": "Olivier", "prenom": "Delphine", "adresse": "16190 Montmoreau"}, {"nom": "Blaineau", "prenom": "Elea", "adresse": "17120 Grézac"}, {"nom": "Paponnaud", "prenom": "Florence", "adresse": "17770 Migron"}, {"nom": "Fruitier", "prenom": "Perine", "adresse": "17500 Jonzac"}, {"nom": "Dailly Vallet", "prenom": "Lou Ann", "adresse": "17430 Genouille"}];
+
+const map = L.map('map');
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+const groups = new Map();
+people.forEach(p => {
+  if (!groups.has(p.adresse)) groups.set(p.adresse, []);
+  groups.get(p.adresse).push(p);
+});
+
+async function geocode(address) {
+  const url = 'https://geo.api.gouv.fr/communes?codePostal=' +
+    encodeURIComponent(address.slice(0,5)) +
+    '&nom=' + encodeURIComponent(address.slice(6)) +
+    '&fields=nom,centre,codesPostaux&format=json';
+  const r = await fetch(url);
+  const arr = await r.json();
+  if (!arr.length) throw new Error(address);
+  const cp = address.slice(0,5);
+  const exact = arr.find(x => (x.codesPostaux || []).includes(cp)) || arr[0];
+  return exact;
+}
+
+(async () => {
+  const bounds = [];
+  let ok = 0;
+  let failed = [];
+  for (const [address, members] of groups) {
+    try {
+      const c = await geocode(address);
+      const lat = c.centre.coordinates[1], lon = c.centre.coordinates[0];
+      const names = members.map(p => `<div>${p.prenom} ${p.nom}</div>`).join('');
+      const title = members.length > 1 ? `${c.nom} — ${members.length} adhérentes` : c.nom;
+      L.marker([lat,lon]).addTo(map)
+        .bindTooltip(title)
+        .bindPopup(`<b>${c.nom}</b><hr style="border:0;border-top:1px solid #ddd">${names}`);
+      bounds.push([lat,lon]); ok++;
+    } catch(e) {
+      failed.push(address);
+    }
+    document.getElementById('status').textContent = `Carte : ${ok} / ${groups.size} communes chargées`;
+    await new Promise(r => setTimeout(r, 180));
+  }
+  if (bounds.length) map.fitBounds(bounds, {padding:[35,35]});
+  document.getElementById('status').innerHTML =
+    `<b>Carte des adhérentes</b><br>${people.length} adhérentes · ${ok} communes`;
+  if (failed.length) document.getElementById('status').innerHTML +=
+    `<br><small>À vérifier : ${failed.join(', ')}</small>`;
+})();
+</script>
+</body>
+</html>
